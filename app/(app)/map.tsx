@@ -1,8 +1,9 @@
 import { useRef } from "react";
-import { View, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { View, TouchableOpacity, StyleSheet } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { MapWrapper } from "@/components/map/MapWrapper";
 import { MemoryPin } from "@/components/map/MemoryPin";
 import { useLocation } from "@/hooks/useLocation";
@@ -36,7 +37,7 @@ export default function MapScreen() {
   }
 
   function handleAddMemory() {
-    Alert.alert("Phase 2 coming soon!", "Memory creation will be available next.");
+    router.push("/(app)/memory/create");
   }
 
   return (
@@ -65,6 +66,7 @@ export default function MapScreen() {
               key={memory.id}
               coordinate={{ latitude: memory.latitude, longitude: memory.longitude }}
               tracksViewChanges={false}
+              onPress={() => router.push(`/(app)/memory/${memory.id}`)}
             >
               <MemoryPin imageUrl={memory.image_url} />
             </Marker>

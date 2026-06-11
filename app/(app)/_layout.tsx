@@ -53,6 +53,10 @@ export default function AppLayout() {
       />
       {/* Hide from tab bar */}
       <Tabs.Screen name="home" options={{ href: null }} />
+      <Tabs.Screen
+        name="memory"
+        options={{ href: null, tabBarStyle: { display: "none" } }}
+      />
     </Tabs>
   );
 }

@@ -9,7 +9,7 @@
     "@react-native-community/netinfo": "12.0.1",
     "@supabase/supabase-js": "^2.108.0",
     "babel-preset-expo": "^56.0.14",
-    "expo": "~56.0.9",
+    "expo": "~56.0.11",
     "expo-constants": "~56.0.17",
     "expo-font": "~56.0.5",
     "expo-image-manipulator": "~56.0.18",
