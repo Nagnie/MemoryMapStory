@@ -1,9 +1,13 @@
+import { useState, useEffect, useCallback } from "react";
 import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { useMemoriesStore } from "@/store/memories";
+import { useDuoMapStore } from "@/store/duoMap";
+import { useAuthStore } from "@/store/auth";
+import { ReactionPicker, ReactionGroup } from "@/components/memory/ReactionPicker";
 import { useTheme } from "@/hooks/useTheme";
 
 const MOOD_EMOJI: Record<string, string> = {
@@ -17,8 +21,82 @@ const MOOD_EMOJI: Record<string, string> = {
 export default function MemoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const t = useTheme();
-  const { memories, removeMemory } = useMemoriesStore();
-  const memory = memories.find((m) => m.id === id);
+  const { user } = useAuthStore();
+  const { memories: myMemories, removeMemory } = useMemoriesStore();
+  const { memories: duoMemories } = useDuoMapStore();
+  const [reactions, setReactions] = useState<ReactionGroup[]>([]);
+
+  // Check both personal and duo map stores
+  const memory =
+    myMemories.find((m) => m.id === id) ?? duoMemories.find((m) => m.id === id);
+
+  const isOwner = memory?.user_id === user?.id;
+
+  const fetchReactions = useCallback(async () => {
+    if (!id) return;
+    const { data } = await supabase
+      .from("reactions")
+      .select("emoji, user_id")
+      .eq("memory_id", id);
+
+    if (!data) return;
+
+    const grouped: Record<string, { count: number; mine: boolean }> = {};
+    for (const r of data) {
+      if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, mine: false };
+      grouped[r.emoji].count++;
+      if (r.user_id === user?.id) grouped[r.emoji].mine = true;
+    }
+
+    setReactions(
+      Object.entries(grouped).map(([emoji, { count, mine }]) => ({
+        emoji,
+        count,
+        mine,
+      }))
+    );
+  }, [id, user?.id]);
+
+  useEffect(() => {
+    fetchReactions();
+  }, [fetchReactions]);
+
+  async function handleReact(emoji: string) {
+    if (!user || !memory) return;
+
+    const existing = reactions.find((r) => r.emoji === emoji && r.mine);
+    if (existing) {
+      await supabase
+        .from("reactions")
+        .delete()
+        .eq("memory_id", memory.id)
+        .eq("user_id", user.id);
+    } else {
+      await supabase
+        .from("reactions")
+        .upsert(
+          { memory_id: memory.id, user_id: user.id, emoji },
+          { onConflict: "memory_id,user_id" }
+        );
+    }
+    fetchReactions();
+  }
+
+  function handleDelete() {
+    if (!memory) return;
+    Alert.alert("Delete memory?", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await supabase.from("memories").delete().eq("id", memory.id);
+          removeMemory(memory.id);
+          router.back();
+        },
+      },
+    ]);
+  }
 
   if (!memory) {
     return (
@@ -29,21 +107,6 @@ export default function MemoryScreen() {
         </TouchableOpacity>
       </View>
     );
-  }
-
-  function handleDelete() {
-    Alert.alert("Delete memory?", "This cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await supabase.from("memories").delete().eq("id", memory!.id);
-          removeMemory(memory!.id);
-          router.back();
-        },
-      },
-    ]);
   }
 
   const date = new Date(memory.created_at).toLocaleDateString("en-US", {
@@ -58,10 +121,9 @@ export default function MemoryScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Full-screen image */}
       <Image source={{ uri: memory.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
 
-      {/* Bottom gradient overlay */}
+      {/* Gradient overlay */}
       <View style={styles.gradient} />
 
       {/* Top bar */}
@@ -69,9 +131,11 @@ export default function MemoryScreen() {
         <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconBtn} onPress={handleDelete}>
-          <Ionicons name="trash-outline" size={20} color="#fff" />
-        </TouchableOpacity>
+        {isOwner && (
+          <TouchableOpacity style={styles.iconBtn} onPress={handleDelete}>
+            <Ionicons name="trash-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+        )}
       </SafeAreaView>
 
       {/* Bottom details */}
@@ -98,6 +162,11 @@ export default function MemoryScreen() {
               {memory.latitude.toFixed(5)}, {memory.longitude.toFixed(5)}
             </Text>
           </View>
+
+          {/* Reactions */}
+          <View style={styles.reactionSection}>
+            <ReactionPicker reactions={reactions} onReact={handleReact} />
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -109,33 +178,41 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   gradient: {
     position: "absolute",
-    left: 0, right: 0, bottom: 0,
-    height: 320,
-    // simulate linear gradient: black at bottom, transparent at top
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 380,
     backgroundColor: "transparent",
   },
   topBar: {
     position: "absolute",
-    top: 0, left: 0, right: 0,
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingTop: 8,
   },
   iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: "center", justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.4)",
   },
   bottomBar: {
     position: "absolute",
-    left: 0, right: 0, bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 8,
   },
-  details: { gap: 8 },
+  details: { gap: 10 },
   moodBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -167,5 +244,11 @@ const styles = StyleSheet.create({
   metaText: {
     color: "rgba(255,255,255,0.65)",
     fontSize: 12.5,
+  },
+  reactionSection: {
+    marginTop: 4,
+    paddingTop: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: "rgba(255,255,255,0.15)",
   },
 });
