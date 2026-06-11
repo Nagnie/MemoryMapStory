@@ -26,7 +26,20 @@
       "expo-router",
       "expo-status-bar",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow MemoryMap to use your location to place memories on the map."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow MemoryMap to access your photos.",
+          "cameraPermission": "Allow MemoryMap to take photos for memories."
+        }
+      ]
     ]
   }
 }
