@@ -1,16 +1,19 @@
 import { useRef, useState, useMemo } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
+import MapView, { Marker, Region, PROVIDER_DEFAULT } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { MapWrapper } from "@/components/map/MapWrapper";
 import { MemoryPin } from "@/components/map/MemoryPin";
+import { ClusterMarker } from "@/components/map/ClusterMarker";
 import { PartnerStatus } from "@/components/duo/PartnerStatus";
 import { useLocation } from "@/hooks/useLocation";
 import { useDuoMapRealtime } from "@/hooks/useDuoMap";
 import { useDuoMapStore } from "@/store/duoMap";
 import { useAuthStore } from "@/store/auth";
+import { clusterMemories, getBoundingRegion } from "@/lib/cluster";
+import { mapStyle } from "@/lib/mapStyle";
 import { useTheme } from "@/hooks/useTheme";
 
 const PARTNER_COLOR = "#60a5fa";
@@ -32,6 +35,7 @@ export default function DuoMapScreen() {
   const { location, permissionGranted } = useLocation();
   const { memories, members, partnerOnline } = useDuoMapStore();
   const [filter, setFilter] = useState<Filter>("all");
+  const [latDelta, setLatDelta] = useState(0.05);
 
   useDuoMapRealtime(id);
 
@@ -42,6 +46,22 @@ export default function DuoMapScreen() {
     if (filter === "partner") return memories.filter((m) => m.user_id !== user?.id);
     return memories;
   }, [memories, filter, user?.id]);
+
+  const clusters = useMemo(
+    () => clusterMemories(filteredMemories, latDelta),
+    [filteredMemories, latDelta]
+  );
+
+  function handleRegionChange(region: Region) {
+    setLatDelta(region.latitudeDelta);
+  }
+
+  function handleClusterPress(lats: number[], lngs: number[]) {
+    const region = getBoundingRegion(
+      lats.map((lat, i) => ({ latitude: lat, longitude: lngs[i] } as any))
+    );
+    if (region) mapRef.current?.animateToRegion(region, 400);
+  }
 
   function handleLocateMe() {
     if (!location) return;
@@ -76,13 +96,37 @@ export default function DuoMapScreen() {
           showsUserLocation
           showsMyLocationButton={false}
           showsCompass={false}
+          customMapStyle={mapStyle}
+          onRegionChangeComplete={handleRegionChange}
         >
-          {filteredMemories.map((memory) => {
+          {clusters.map((cluster) => {
+            if (cluster.isCluster) {
+              const hasMyMemory = cluster.items.some((m) => m.user_id === user?.id);
+              return (
+                <Marker
+                  key={cluster.id}
+                  coordinate={{ latitude: cluster.latitude, longitude: cluster.longitude }}
+                  tracksViewChanges={false}
+                  onPress={() =>
+                    handleClusterPress(
+                      cluster.items.map((m) => m.latitude),
+                      cluster.items.map((m) => m.longitude)
+                    )
+                  }
+                >
+                  <ClusterMarker
+                    count={cluster.count}
+                    color={hasMyMemory ? t.primary : PARTNER_COLOR}
+                  />
+                </Marker>
+              );
+            }
+            const memory = cluster.items[0];
             const isMe = memory.user_id === user?.id;
             return (
               <Marker
-                key={memory.id}
-                coordinate={{ latitude: memory.latitude, longitude: memory.longitude }}
+                key={cluster.id}
+                coordinate={{ latitude: cluster.latitude, longitude: cluster.longitude }}
                 tracksViewChanges={false}
                 onPress={() => router.push(`/(app)/memory/${memory.id}`)}
               >

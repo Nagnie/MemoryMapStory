@@ -16,9 +16,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
+import NetInfo from "@react-native-community/netinfo";
 import { supabase } from "@/lib/supabase";
 import { uploadMemoryImage } from "@/lib/storage";
 import { getCurrentLocation } from "@/lib/location";
+import { OfflineQueue, generateDraftId } from "@/lib/offline-queue";
 import { useAuthStore } from "@/store/auth";
 import { useMemoriesStore, MoodTag, Memory } from "@/store/memories";
 import { MoodTagPicker } from "@/components/memory/MoodTagPicker";
@@ -62,11 +65,38 @@ export default function CreateMemoryScreen() {
   async function handleSave() {
     if (!imageUri || !user) return;
     setUploading(true);
+
     try {
       const location = await getCurrentLocation();
       if (!location) {
-        Alert.alert("Location error", "Could not get your location. Enable location services and try again.");
+        Alert.alert(
+          "Location error",
+          "Could not get your location. Enable location services and try again."
+        );
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setUploading(false);
+        return;
+      }
+
+      const netState = await NetInfo.fetch();
+
+      if (!netState.isConnected) {
+        // Save as draft for later
+        await OfflineQueue.enqueue({
+          id: generateDraftId(),
+          imageUri,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          caption: caption.trim() || null,
+          mood_tag: mood,
+          created_at: new Date().toISOString(),
+        });
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Alert.alert(
+          "Saved offline",
+          "No internet connection. Your memory will upload automatically when you're back online."
+        );
+        router.back();
         return;
       }
 
@@ -88,10 +118,15 @@ export default function CreateMemoryScreen() {
       if (error) throw error;
 
       addMemory(data as Memory);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (e) {
       console.error("[create memory]", e);
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save memory. Please try again.");
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        "Error",
+        e instanceof Error ? e.message : "Failed to save memory. Please try again."
+      );
     } finally {
       setUploading(false);
     }
@@ -141,7 +176,10 @@ export default function CreateMemoryScreen() {
                   <Text style={s.pickerBtnText}>Camera</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[s.pickerBtn, { backgroundColor: t.surface, borderWidth: 1, borderColor: t.border }]}
+                  style={[
+                    s.pickerBtn,
+                    { backgroundColor: t.surface, borderWidth: 1, borderColor: t.border },
+                  ]}
                   onPress={openGallery}
                 >
                   <Ionicons name="images-outline" size={20} color={t.text} />
@@ -153,7 +191,6 @@ export default function CreateMemoryScreen() {
 
           {/* Form */}
           <View style={s.form}>
-            {/* Caption */}
             <View style={[s.inputWrap, { backgroundColor: t.surface, borderColor: t.border }]}>
               <TextInput
                 style={[s.input, { color: t.text }]}
@@ -166,11 +203,11 @@ export default function CreateMemoryScreen() {
               />
             </View>
 
-            {/* Mood */}
-            <Text style={[s.sectionLabel, { color: t.textSecondary }]}>How are you feeling?</Text>
+            <Text style={[s.sectionLabel, { color: t.textSecondary }]}>
+              How are you feeling?
+            </Text>
             <MoodTagPicker selected={mood} onSelect={setMood} />
 
-            {/* Location note */}
             <View style={s.locationNote}>
               <Ionicons name="location-outline" size={13} color={t.textMuted} />
               <Text style={[s.locationText, { color: t.textMuted }]}>
@@ -183,7 +220,10 @@ export default function CreateMemoryScreen() {
         {/* Save button */}
         <View style={[s.footer, { borderTopColor: t.border, backgroundColor: t.background }]}>
           <TouchableOpacity
-            style={[s.saveBtn, { backgroundColor: imageUri && !uploading ? t.primary : t.border }]}
+            style={[
+              s.saveBtn,
+              { backgroundColor: imageUri && !uploading ? t.primary : t.border },
+            ]}
             onPress={handleSave}
             disabled={!imageUri || uploading}
             activeOpacity={0.85}
@@ -215,18 +255,31 @@ function createStyles(t: { [key: string]: string }) {
       paddingVertical: 12,
     },
     headerBtn: {
-      width: 40, height: 40, borderRadius: 20,
-      alignItems: "center", justifyContent: "center",
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
     },
     headerTitle: { fontSize: 16, fontWeight: "700" },
     scroll: { paddingBottom: 24 },
-    previewWrap: { position: "relative", marginHorizontal: 16, borderRadius: 20, overflow: "hidden" },
+    previewWrap: {
+      position: "relative",
+      marginHorizontal: 16,
+      borderRadius: 20,
+      overflow: "hidden",
+    },
     preview: { width: "100%", height: 340, borderRadius: 20 },
     changePhotoBtn: {
-      position: "absolute", bottom: 12, right: 12,
-      flexDirection: "row", alignItems: "center", gap: 5,
+      position: "absolute",
+      bottom: 12,
+      right: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
       backgroundColor: "rgba(0,0,0,0.5)",
-      paddingHorizontal: 12, paddingVertical: 7,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
       borderRadius: 20,
     },
     changePhotoText: { color: "#fff", fontSize: 12.5, fontWeight: "600" },
@@ -260,9 +313,16 @@ function createStyles(t: { [key: string]: string }) {
       minHeight: 80,
     },
     input: { fontSize: 15, lineHeight: 22 },
-    sectionLabel: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
+    sectionLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
     locationNote: {
-      flexDirection: "row", alignItems: "center", gap: 6,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
       paddingTop: 4,
     },
     locationText: { fontSize: 12.5 },
