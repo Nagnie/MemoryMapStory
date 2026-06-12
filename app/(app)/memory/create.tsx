@@ -21,7 +21,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { uploadMemoryImage } from "@/lib/storage";
-import { getCurrentLocation } from "@/lib/location";
+import { getCurrentLocation, reverseGeocode } from "@/lib/location";
 import { OfflineQueue, generateDraftId } from "@/lib/offline-queue";
 import { useAuthStore } from "@/store/auth";
 import { MoodTag, Memory } from "@/store/memories";
@@ -83,7 +83,7 @@ export default function CreateMemoryScreen() {
       const netState = await NetInfo.fetch();
 
       if (!netState.isConnected) {
-        // Save as draft for later
+        // Save as draft for later — geocode lúc sync khi có mạng
         await OfflineQueue.enqueue({
           id: generateDraftId(),
           imageUri,
@@ -91,6 +91,7 @@ export default function CreateMemoryScreen() {
           longitude: location.coords.longitude,
           caption: caption.trim() || null,
           mood_tag: mood,
+          place_name: null,
           created_at: new Date().toISOString(),
         });
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -102,7 +103,10 @@ export default function CreateMemoryScreen() {
         return;
       }
 
-      const imageUrl = await uploadMemoryImage(imageUri, user.id);
+      const [imageUrl, placeName] = await Promise.all([
+        uploadMemoryImage(imageUri, user.id),
+        reverseGeocode(location.coords.latitude, location.coords.longitude),
+      ]);
 
       const { data, error } = await supabase
         .from("memories")
@@ -113,6 +117,7 @@ export default function CreateMemoryScreen() {
           longitude: location.coords.longitude,
           caption: caption.trim() || null,
           mood_tag: mood,
+          place_name: placeName,
         })
         .select()
         .single();

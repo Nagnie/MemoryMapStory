@@ -8,6 +8,7 @@ export interface Memory {
   longitude: number;
   caption: string | null;
   mood_tag: MoodTag | null;
+  place_name: string | null;
   is_public: boolean;
   created_at: string;
 }

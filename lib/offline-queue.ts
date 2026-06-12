@@ -10,6 +10,7 @@ export interface DraftMemory {
   longitude: number;
   caption: string | null;
   mood_tag: MoodTag | null;
+  place_name: string | null;
   created_at: string;
 }
 

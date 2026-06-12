@@ -1,12 +1,14 @@
-import { View, Image, StyleSheet } from "react-native";
+import { View, Image, Text, StyleSheet } from "react-native";
 
 interface Props {
   imageUrl: string;
   size?: number;
   borderColor?: string;
+  /** Tên địa điểm hiện nhỏ phía dưới pin (Phase 5A) */
+  placeName?: string | null;
 }
 
-export function MemoryPin({ imageUrl, size = 54, borderColor = "#fff" }: Props) {
+export function MemoryPin({ imageUrl, size = 54, borderColor = "#fff", placeName }: Props) {
   return (
     <View style={styles.wrapper}>
       <View
@@ -28,6 +30,13 @@ export function MemoryPin({ imageUrl, size = 54, borderColor = "#fff" }: Props) 
         />
       </View>
       <View style={[styles.tail, { borderTopColor: borderColor }]} />
+      {placeName ? (
+        <View style={styles.labelWrap}>
+          <Text style={styles.label} numberOfLines={1}>
+            {placeName}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -59,5 +68,18 @@ const styles = StyleSheet.create({
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
     marginTop: -1,
+  },
+  labelWrap: {
+    marginTop: 3,
+    maxWidth: 110,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  label: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
   },
 });

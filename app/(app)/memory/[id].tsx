@@ -131,7 +131,8 @@ export default function MemoryScreen() {
           <View style={styles.metaRow}>
             <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.65)" />
             <Text style={styles.metaText}>
-              {memory.latitude.toFixed(5)}, {memory.longitude.toFixed(5)}
+              {memory.place_name ??
+                `${memory.latitude.toFixed(5)}, ${memory.longitude.toFixed(5)}`}
             </Text>
           </View>
 

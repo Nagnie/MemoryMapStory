@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import NetInfo from "@react-native-community/netinfo";
 import { supabase } from "@/lib/supabase";
 import { uploadMemoryImage } from "@/lib/storage";
+import { reverseGeocode } from "@/lib/location";
 import { OfflineQueue, DraftMemory } from "@/lib/offline-queue";
 import { useAuthStore } from "@/store/auth";
 import { memoriesQueryKey } from "./useMemoriesQuery";
@@ -28,6 +29,9 @@ export function useOfflineSync() {
     for (const draft of queue) {
       try {
         const imageUrl = await uploadMemoryImage(draft.imageUri, user.id);
+        // Draft tạo lúc offline chưa có place_name — geocode bây giờ khi đã có mạng
+        const placeName =
+          draft.place_name ?? (await reverseGeocode(draft.latitude, draft.longitude));
         const { error } = await supabase.from("memories").insert({
           user_id: user.id,
           image_url: imageUrl,
@@ -35,6 +39,7 @@ export function useOfflineSync() {
           longitude: draft.longitude,
           caption: draft.caption,
           mood_tag: draft.mood_tag,
+          place_name: placeName,
           created_at: draft.created_at,
         });
 
