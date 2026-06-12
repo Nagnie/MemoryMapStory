@@ -11,6 +11,7 @@ import { PartnerStatus } from "@/components/duo/PartnerStatus";
 import { useLocation } from "@/hooks/useLocation";
 import { useDuoMapRealtime } from "@/hooks/useDuoMap";
 import { useDuoMapStore } from "@/store/duoMap";
+import { useDuoMapQuery, useDuoMemoriesQuery } from "@/hooks/useDuoMapQuery";
 import { useAuthStore } from "@/store/auth";
 import { clusterMemories, getBoundingRegion } from "@/lib/cluster";
 import { mapStyle } from "@/lib/mapStyle";
@@ -33,7 +34,10 @@ export default function DuoMapScreen() {
   const mapRef = useRef<MapView>(null);
   const { user } = useAuthStore();
   const { location, permissionGranted } = useLocation();
-  const { memories, members, partnerOnline } = useDuoMapStore();
+  const { partnerOnline } = useDuoMapStore();
+  const { data: duoData } = useDuoMapQuery();
+  const members = duoData?.members ?? [];
+  const { data: memories = [] } = useDuoMemoriesQuery(id);
   const [filter, setFilter] = useState<Filter>("all");
   const [latDelta, setLatDelta] = useState(0.05);
 

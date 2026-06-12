@@ -18,19 +18,21 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import NetInfo from "@react-native-community/netinfo";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { uploadMemoryImage } from "@/lib/storage";
 import { getCurrentLocation } from "@/lib/location";
 import { OfflineQueue, generateDraftId } from "@/lib/offline-queue";
 import { useAuthStore } from "@/store/auth";
-import { useMemoriesStore, MoodTag, Memory } from "@/store/memories";
+import { MoodTag, Memory } from "@/store/memories";
+import { memoriesQueryKey } from "@/hooks/useMemoriesQuery";
 import { MoodTagPicker } from "@/components/memory/MoodTagPicker";
 import { useTheme } from "@/hooks/useTheme";
 
 export default function CreateMemoryScreen() {
   const t = useTheme();
   const { user } = useAuthStore();
-  const { addMemory } = useMemoriesStore();
+  const queryClient = useQueryClient();
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
@@ -117,7 +119,10 @@ export default function CreateMemoryScreen() {
 
       if (error) throw error;
 
-      addMemory(data as Memory);
+      queryClient.setQueryData<Memory[]>(
+        memoriesQueryKey(user.id),
+        (old) => [data as Memory, ...(old ?? [])]
+      );
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (e) {

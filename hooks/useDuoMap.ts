@@ -1,74 +1,78 @@
 import { useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/auth";
-import { useDuoMapStore, Reaction } from "@/store/duoMap";
-import { Memory } from "@/store/memories";
+import { useDuoMapStore } from "@/store/duoMap";
+import { duoMemoriesQueryKey } from "./useDuoMapQuery";
+import { reactionsQueryKey } from "./useReactionsQuery";
+import type { Memory } from "@/store/memories";
 
 export function useDuoMapRealtime(duoMapId: string) {
   const { user } = useAuthStore();
-  const store = useDuoMapStore();
+  const { setPartnerOnline } = useDuoMapStore();
+  const queryClient = useQueryClient();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
     if (!duoMapId || !user) return;
-
-    // Fetch all members → then fetch their memories
-    supabase
-      .from("duo_map_members")
-      .select("user_id")
-      .eq("duo_map_id", duoMapId)
-      .then(({ data: members }) => {
-        if (!members?.length) return;
-        const ids = members.map((m) => m.user_id);
-        supabase
-          .from("memories")
-          .select("*")
-          .in("user_id", ids)
-          .order("created_at", { ascending: false })
-          .then(({ data }) => {
-            if (data) store.setMemories(data as Memory[]);
-          });
-      });
 
     const channel = supabase
       .channel(`duo:${duoMapId}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "memories" },
-        (payload) => store.addMemory(payload.new as Memory)
+        (payload) => {
+          const memory = payload.new as Memory;
+          queryClient.setQueryData<Memory[]>(
+            duoMemoriesQueryKey(duoMapId),
+            (old) => {
+              if (!old) return [memory];
+              if (old.some((m) => m.id === memory.id)) return old;
+              return [memory, ...old];
+            }
+          );
+        }
       )
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "reactions" },
-        (payload) => store.addReaction(payload.new as Reaction)
+        (payload) => {
+          queryClient.invalidateQueries({
+            queryKey: reactionsQueryKey(payload.new.memory_id as string),
+          });
+        }
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "reactions" },
-        (payload) => store.addReaction(payload.new as Reaction)
+        (payload) => {
+          queryClient.invalidateQueries({
+            queryKey: reactionsQueryKey(payload.new.memory_id as string),
+          });
+        }
       )
       .on(
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "reactions" },
-        (payload) =>
-          store.removeReaction(
-            payload.old.memory_id as string,
-            payload.old.user_id as string
-          )
+        (payload) => {
+          queryClient.invalidateQueries({
+            queryKey: reactionsQueryKey(payload.old.memory_id as string),
+          });
+        }
       )
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState<{ user_id: string }>();
-        const partnerOnline = Object.values(state)
+        const online = Object.values(state)
           .flat()
-          .some((p) => (p as { user_id: string }).user_id !== user.id);
-        store.setPartnerOnline(partnerOnline);
+          .some((p) => p.user_id !== user.id);
+        setPartnerOnline(online);
       })
       .on("presence", { event: "leave" }, () => {
         const state = channel.presenceState<{ user_id: string }>();
-        const partnerOnline = Object.values(state)
+        const online = Object.values(state)
           .flat()
-          .some((p) => (p as { user_id: string }).user_id !== user.id);
-        store.setPartnerOnline(partnerOnline);
+          .some((p) => p.user_id !== user.id);
+        setPartnerOnline(online);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -81,7 +85,7 @@ export function useDuoMapRealtime(duoMapId: string) {
     return () => {
       channel.untrack();
       channel.unsubscribe();
-      store.setPartnerOnline(false);
+      setPartnerOnline(false);
     };
   }, [duoMapId, user?.id]);
 }

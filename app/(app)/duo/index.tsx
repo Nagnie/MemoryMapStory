@@ -12,17 +12,24 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/auth";
-import { useDuoMapStore, DuoMap, DuoMember } from "@/store/duoMap";
+import { useDuoMapStore } from "@/store/duoMap";
+import { useDuoMapQuery, duoMapQueryKey } from "@/hooks/useDuoMapQuery";
 import { PartnerStatus } from "@/components/duo/PartnerStatus";
 import { useTheme } from "@/hooks/useTheme";
+import type { DuoMap, DuoMember } from "@/store/duoMap";
 
 export default function DuoIndexScreen() {
   const t = useTheme();
   const { user } = useAuthStore();
-  const { duoMap, members, isLoading, partnerOnline, setDuoMap, setMembers, setLoading } =
-    useDuoMapStore();
+  const { partnerOnline } = useDuoMapStore();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, refetch } = useDuoMapQuery();
+  const duoMap = data?.duoMap ?? null;
+  const members = data?.members ?? [];
 
   const [joinCode, setJoinCode] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -32,74 +39,28 @@ export default function DuoIndexScreen() {
   const partner = members.find((m) => m.user_id !== user?.id);
   const isActive = members.length >= 2;
 
-  const fetchDuoMap = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-
-    const { data } = await supabase
-      .from("duo_map_members")
-      .select("duo_map_id, duo_maps(id, invite_code, created_at)")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (data?.duo_maps) {
-      const dm = (Array.isArray(data.duo_maps) ? data.duo_maps[0] : data.duo_maps) as DuoMap;
-      setDuoMap(dm);
-
-      const [membersRes, profilesRes] = await Promise.all([
-        supabase
-          .from("duo_map_members")
-          .select("id, duo_map_id, user_id, joined_at")
-          .eq("duo_map_id", data.duo_map_id),
-        supabase
-          .from("profiles")
-          .select("id, full_name, avatar_url")
-          .eq("id", data.duo_map_id),
-      ]);
-
-      // Fetch profile for each member
-      const rawMembers = membersRes.data ?? [];
-      const memberIds = rawMembers.map((m) => m.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url")
-        .in("id", memberIds);
-
-      const enriched: DuoMember[] = rawMembers.map((m) => ({
-        ...m,
-        profile: profiles?.find((p) => p.id === m.user_id) ?? null,
-      }));
-      setMembers(enriched);
-    } else {
-      setDuoMap(null);
-      setMembers([]);
-    }
-
-    setLoading(false);
-  }, [user?.id]);
-
   useFocusEffect(
     useCallback(() => {
-      fetchDuoMap();
-    }, [fetchDuoMap])
+      void queryClient.invalidateQueries({ queryKey: duoMapQueryKey(user?.id) });
+    }, [user?.id])
   );
 
   async function handleCreate() {
     if (!user) return;
     setIsCreating(true);
-    const { data, error } = await supabase.rpc("create_duo_map");
+    const { data: rpcData, error } = await supabase.rpc("create_duo_map");
 
-    if (error || data?.error) {
-      const msg = data?.error === "already_in_duo_map"
-        ? "You're already in a duo map."
-        : "Failed to create duo map. Try again.";
+    if (error || rpcData?.error) {
+      const msg =
+        rpcData?.error === "already_in_duo_map"
+          ? "You're already in a duo map."
+          : "Failed to create duo map. Try again.";
       Alert.alert("Error", msg);
       setIsCreating(false);
       return;
     }
 
-    setDuoMap({ id: data.id, invite_code: data.invite_code, created_at: new Date().toISOString() });
-    setMembers([{ id: "", duo_map_id: data.id, user_id: user.id, joined_at: new Date().toISOString() }]);
+    await refetch();
     setIsCreating(false);
   }
 
@@ -111,22 +72,22 @@ export default function DuoIndexScreen() {
     }
 
     setIsJoining(true);
-    const { data, error } = await supabase.rpc("join_duo_map", { p_invite_code: code });
+    const { data: rpcData, error } = await supabase.rpc("join_duo_map", { p_invite_code: code });
 
-    if (error || data?.error) {
+    if (error || rpcData?.error) {
       const messages: Record<string, string> = {
         invalid_code: "That code doesn't exist.",
         map_full: "This duo map is already full.",
         already_in_duo_map: "You're already in a duo map.",
       };
-      Alert.alert("Error", messages[data?.error] ?? "Failed to join. Try again.");
+      Alert.alert("Error", messages[rpcData?.error] ?? "Failed to join. Try again.");
       setIsJoining(false);
       return;
     }
 
     setJoinCode("");
     setShowJoinInput(false);
-    await fetchDuoMap();
+    await refetch();
     setIsJoining(false);
   }
 
@@ -264,10 +225,7 @@ export default function DuoIndexScreen() {
             <Text style={[styles.cardTitle, { color: t.text }]}>
               {partner?.profile?.full_name ?? "Your Partner"}
             </Text>
-            <PartnerStatus
-              online={partnerOnline}
-              name={null}
-            />
+            <PartnerStatus online={partnerOnline} name={null} />
 
             <TouchableOpacity
               style={[styles.primaryBtn, { backgroundColor: t.primary, marginTop: 20 }]}

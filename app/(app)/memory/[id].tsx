@@ -1,14 +1,18 @@
-import { useState, useEffect, useCallback } from "react";
 import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { useMemoriesStore } from "@/store/memories";
-import { useDuoMapStore } from "@/store/duoMap";
 import { useAuthStore } from "@/store/auth";
-import { ReactionPicker, ReactionGroup } from "@/components/memory/ReactionPicker";
+import { memoriesQueryKey } from "@/hooks/useMemoriesQuery";
+import { duoMapQueryKey, duoMemoriesQueryKey } from "@/hooks/useDuoMapQuery";
+import { useReactionsQuery, useToggleReactionMutation } from "@/hooks/useReactionsQuery";
+import { useDeleteMemoryMutation } from "@/hooks/useMemoriesQuery";
+import { ReactionPicker } from "@/components/memory/ReactionPicker";
 import { useTheme } from "@/hooks/useTheme";
+import type { Memory } from "@/store/memories";
+import type { DuoMap, DuoMember } from "@/store/duoMap";
 
 const MOOD_EMOJI: Record<string, string> = {
   happy: "😊",
@@ -22,65 +26,38 @@ export default function MemoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const t = useTheme();
   const { user } = useAuthStore();
-  const { memories: myMemories, removeMemory } = useMemoriesStore();
-  const { memories: duoMemories } = useDuoMapStore();
-  const [reactions, setReactions] = useState<ReactionGroup[]>([]);
+  const queryClient = useQueryClient();
 
-  // Check both personal and duo map stores
-  const memory =
-    myMemories.find((m) => m.id === id) ?? duoMemories.find((m) => m.id === id);
+  const { data: memory } = useQuery({
+    queryKey: ["memory", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("memories")
+        .select("*")
+        .eq("id", id!)
+        .single();
+      if (error) throw error;
+      return data as Memory;
+    },
+    enabled: !!id,
+    placeholderData: () => {
+      // Tìm nhanh trong cache hiện có để render ngay lập tức
+      const personal = queryClient.getQueryData<Memory[]>(memoriesQueryKey(user?.id));
+      const duoData = queryClient.getQueryData<{ duoMap: DuoMap | null; members: DuoMember[] }>(
+        duoMapQueryKey(user?.id)
+      );
+      const duo = duoData?.duoMap
+        ? queryClient.getQueryData<Memory[]>(duoMemoriesQueryKey(duoData.duoMap.id))
+        : undefined;
+      return personal?.find((m) => m.id === id) ?? duo?.find((m) => m.id === id);
+    },
+  });
+
+  const { data: reactions = [] } = useReactionsQuery(id);
+  const { mutate: toggleReaction } = useToggleReactionMutation(id);
+  const { mutate: deleteMemory } = useDeleteMemoryMutation();
 
   const isOwner = memory?.user_id === user?.id;
-
-  const fetchReactions = useCallback(async () => {
-    if (!id) return;
-    const { data } = await supabase
-      .from("reactions")
-      .select("emoji, user_id")
-      .eq("memory_id", id);
-
-    if (!data) return;
-
-    const grouped: Record<string, { count: number; mine: boolean }> = {};
-    for (const r of data) {
-      if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, mine: false };
-      grouped[r.emoji].count++;
-      if (r.user_id === user?.id) grouped[r.emoji].mine = true;
-    }
-
-    setReactions(
-      Object.entries(grouped).map(([emoji, { count, mine }]) => ({
-        emoji,
-        count,
-        mine,
-      }))
-    );
-  }, [id, user?.id]);
-
-  useEffect(() => {
-    fetchReactions();
-  }, [fetchReactions]);
-
-  async function handleReact(emoji: string) {
-    if (!user || !memory) return;
-
-    const existing = reactions.find((r) => r.emoji === emoji && r.mine);
-    if (existing) {
-      await supabase
-        .from("reactions")
-        .delete()
-        .eq("memory_id", memory.id)
-        .eq("user_id", user.id);
-    } else {
-      await supabase
-        .from("reactions")
-        .upsert(
-          { memory_id: memory.id, user_id: user.id, emoji },
-          { onConflict: "memory_id,user_id" }
-        );
-    }
-    fetchReactions();
-  }
 
   function handleDelete() {
     if (!memory) return;
@@ -89,10 +66,8 @@ export default function MemoryScreen() {
       {
         text: "Delete",
         style: "destructive",
-        onPress: async () => {
-          await supabase.from("memories").delete().eq("id", memory.id);
-          removeMemory(memory.id);
-          router.back();
+        onPress: () => {
+          deleteMemory(memory.id, { onSuccess: () => router.back() });
         },
       },
     ]);
@@ -123,10 +98,8 @@ export default function MemoryScreen() {
     <View style={styles.container}>
       <Image source={{ uri: memory.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
 
-      {/* Gradient overlay */}
       <View style={styles.gradient} />
 
-      {/* Top bar */}
       <SafeAreaView style={styles.topBar} edges={["top"]}>
         <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -138,7 +111,6 @@ export default function MemoryScreen() {
         )}
       </SafeAreaView>
 
-      {/* Bottom details */}
       <SafeAreaView style={styles.bottomBar} edges={["bottom"]}>
         <View style={styles.details}>
           {memory.mood_tag && (
@@ -163,9 +135,8 @@ export default function MemoryScreen() {
             </Text>
           </View>
 
-          {/* Reactions */}
           <View style={styles.reactionSection}>
-            <ReactionPicker reactions={reactions} onReact={handleReact} />
+            <ReactionPicker reactions={reactions} onReact={toggleReaction} />
           </View>
         </View>
       </SafeAreaView>
