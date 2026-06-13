@@ -45,7 +45,8 @@
           "photosPermission": "Allow MemoryMap to access your photos.",
           "cameraPermission": "Allow MemoryMap to take photos for memories."
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

@@ -43,6 +43,15 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="journal"
+        options={{
+          title: "Journal",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="book-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="duo"
         options={{
           title: "Duo",

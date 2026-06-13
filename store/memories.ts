@@ -1,5 +1,13 @@
 export type MoodTag = "happy" | "nostalgic" | "excited" | "peaceful" | "sad";
 
+export const MOOD_EMOJI: Record<MoodTag, string> = {
+  happy: "😊",
+  nostalgic: "🥺",
+  excited: "🤩",
+  peaceful: "😌",
+  sad: "😢",
+};
+
 export interface Memory {
   id: string;
   user_id: string;

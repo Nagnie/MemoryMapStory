@@ -1,8 +1,19 @@
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { useRef, useState } from "react";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { captureRef } from "react-native-view-shot";
+import * as Sharing from "expo-sharing";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/auth";
 import { memoriesQueryKey } from "@/hooks/useMemoriesQuery";
@@ -10,17 +21,10 @@ import { duoMapQueryKey, duoMemoriesQueryKey } from "@/hooks/useDuoMapQuery";
 import { useReactionsQuery, useToggleReactionMutation } from "@/hooks/useReactionsQuery";
 import { useDeleteMemoryMutation } from "@/hooks/useMemoriesQuery";
 import { ReactionPicker } from "@/components/memory/ReactionPicker";
+import { ShareCard } from "@/components/memory/ShareCard";
 import { useTheme } from "@/hooks/useTheme";
-import type { Memory } from "@/store/memories";
+import { MOOD_EMOJI, type Memory } from "@/store/memories";
 import type { DuoMap, DuoMember } from "@/store/duoMap";
-
-const MOOD_EMOJI: Record<string, string> = {
-  happy: "😊",
-  nostalgic: "🥺",
-  excited: "🤩",
-  peaceful: "😌",
-  sad: "😢",
-};
 
 export default function MemoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -57,7 +61,35 @@ export default function MemoryScreen() {
   const { mutate: toggleReaction } = useToggleReactionMutation(id);
   const { mutate: deleteMemory } = useDeleteMemoryMutation();
 
+  const shareCardRef = useRef<View>(null);
+  const [sharing, setSharing] = useState(false);
+
   const isOwner = memory?.user_id === user?.id;
+
+  async function handleShare() {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert("Sharing unavailable", "Sharing is not available on this device.");
+        return;
+      }
+      const uri = await captureRef(shareCardRef, {
+        format: "png",
+        quality: 1,
+        result: "tmpfile",
+      });
+      await Sharing.shareAsync(uri, {
+        mimeType: "image/png",
+        dialogTitle: "Share memory",
+      });
+    } catch (e) {
+      console.error("[share memory]", e);
+      Alert.alert("Error", "Could not create the share card. Please try again.");
+    } finally {
+      setSharing(false);
+    }
+  }
 
   function handleDelete() {
     if (!memory) return;
@@ -104,11 +136,20 @@ export default function MemoryScreen() {
         <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        {isOwner && (
-          <TouchableOpacity style={styles.iconBtn} onPress={handleDelete}>
-            <Ionicons name="trash-outline" size={20} color="#fff" />
+        <View style={styles.topActions}>
+          <TouchableOpacity style={styles.iconBtn} onPress={handleShare} disabled={sharing}>
+            {sharing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="share-outline" size={20} color="#fff" />
+            )}
           </TouchableOpacity>
-        )}
+          {isOwner && (
+            <TouchableOpacity style={styles.iconBtn} onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </View>
       </SafeAreaView>
 
       <SafeAreaView style={styles.bottomBar} edges={["bottom"]}>
@@ -141,6 +182,11 @@ export default function MemoryScreen() {
           </View>
         </View>
       </SafeAreaView>
+
+      {/* Render off-screen (không dùng opacity 0 — capture sẽ ra ảnh trống) */}
+      <View ref={shareCardRef} collapsable={false} style={styles.shareCardWrap}>
+        <ShareCard memory={memory} />
+      </View>
     </View>
   );
 }
@@ -173,6 +219,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  topActions: { flexDirection: "row", gap: 10 },
+  shareCardWrap: {
+    position: "absolute",
+    top: 0,
+    left: -9999,
   },
   bottomBar: {
     position: "absolute",
