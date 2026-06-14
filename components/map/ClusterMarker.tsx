@@ -5,52 +5,65 @@ interface Props {
   color?: string;
 }
 
+// Hình "pin giọt nước": bầu tròn chứa số + mũi nhọn chỉ xuống đúng toạ độ.
+// Số nằm trong bầu (phía trên mũi) nên không bị chấm vị trí của bạn che mất.
 export function ClusterMarker({ count, color = "#e07a5f" }: Props) {
-  const size = count > 99 ? 52 : count > 9 ? 46 : 40;
+  const display = count > 99 ? "99+" : String(count);
+  const size = count > 99 ? 46 : 40;
 
   return (
-    <View
-      style={[
-        styles.outer,
-        {
-          width: size + 10,
-          height: size + 10,
-          borderRadius: (size + 10) / 2,
-          borderColor: color,
-          backgroundColor: `${color}22`,
-        },
-      ]}
-    >
+    <View style={styles.wrapper}>
       <View
         style={[
-          styles.inner,
-          { width: size, height: size, borderRadius: size / 2, backgroundColor: color },
+          styles.bulb,
+          {
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: color,
+          },
         ]}
       >
-        <Text style={styles.count}>{count > 99 ? "99+" : count}</Text>
+        <Text style={styles.count}>{display}</Text>
       </View>
+      <View style={[styles.tail, { borderTopColor: color }]} />
+      {/* đệm để nâng pin cao hơn chấm vị trí, tránh bị che */}
+      <View style={styles.lift} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  outer: {
+  wrapper: {
     alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
   },
-  inner: {
+  bulb: {
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "#fff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  tail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 11,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    marginTop: -2,
   },
   count: {
     color: "#fff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "800",
+  },
+  lift: {
+    height: 16,
   },
 });

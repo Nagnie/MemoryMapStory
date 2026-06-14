@@ -9,7 +9,13 @@
     "scheme": "myapp",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.MyApp"
+      "bundleIdentifier": "com.anonymous.MyApp",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +28,10 @@
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "web": {
@@ -36,7 +45,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow MemoryMap to use your location to place memories on the map."
+          "locationWhenInUsePermission": "Allow MemoryMap to use your location to place memories on the map.",
+          "locationAlwaysAndWhenInUsePermission": "Allow MemoryMap to use your location in the background so it can remind you when you're near an old memory.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [
@@ -46,7 +58,20 @@
           "cameraPermission": "Allow MemoryMap to take photos for memories."
         }
       ],
-      "expo-sharing"
-    ]
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "color": "#e07a5f"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d24812d6-2059-4ac7-8a46-295013c7995c"
+      }
+    },
+    "owner": "nagnie"
   }
 }

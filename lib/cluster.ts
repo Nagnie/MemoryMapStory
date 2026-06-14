@@ -14,16 +14,35 @@ export function clusterMemories(
   memories: Memory[],
   latDelta: number
 ): ClusterPoint[] {
-  // Zoomed in enough — show individual pins
+  // Zoomed in enough — show individual pins, nhưng vẫn gom các memory
+  // gần như trùng toạ độ thành 1 "chồng thẻ" (stack) để không bị che thành 1.
   if (latDelta < 0.015 || memories.length === 0) {
-    return memories.map((m) => ({
-      id: m.id,
-      items: [m],
-      latitude: m.latitude,
-      longitude: m.longitude,
-      count: 1,
-      isCluster: false,
-    }));
+    const EPS = 0.00015; // ~15m
+    const assigned = new Set<string>();
+    const stacks: ClusterPoint[] = [];
+
+    for (const memory of memories) {
+      if (assigned.has(memory.id)) continue;
+
+      const stack = memories.filter(
+        (m) =>
+          !assigned.has(m.id) &&
+          Math.abs(m.latitude - memory.latitude) < EPS &&
+          Math.abs(m.longitude - memory.longitude) < EPS
+      );
+      stack.forEach((m) => assigned.add(m.id));
+
+      stacks.push({
+        id: stack.length === 1 ? stack[0].id : `stack_${memory.id}_${stack.length}`,
+        items: stack,
+        latitude: memory.latitude,
+        longitude: memory.longitude,
+        count: stack.length,
+        isCluster: false,
+      });
+    }
+
+    return stacks;
   }
 
   const radius = latDelta * 0.12;

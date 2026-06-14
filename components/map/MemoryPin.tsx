@@ -30,6 +30,8 @@ export function MemoryPin({ imageUrl, size = 54, borderColor = "#fff", placeName
         />
       </View>
       <View style={[styles.tail, { borderTopColor: borderColor }]} />
+      {/* đệm để nâng pin cao hơn chấm vị trí, tránh bị che */}
+      <View style={styles.lift} />
       {placeName ? (
         <View style={styles.labelWrap}>
           <Text style={styles.label} numberOfLines={1}>
@@ -68,6 +70,9 @@ const styles = StyleSheet.create({
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
     marginTop: -1,
+  },
+  lift: {
+    height: 16,
   },
   labelWrap: {
     marginTop: 3,

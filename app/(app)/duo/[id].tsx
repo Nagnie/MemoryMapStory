@@ -40,6 +40,7 @@ export default function DuoMapScreen() {
   const { data: memories = [] } = useDuoMemoriesQuery(id);
   const [filter, setFilter] = useState<Filter>("all");
   const [latDelta, setLatDelta] = useState(0.05);
+  const regionRef = useRef<Region>(HO_CHI_MINH);
 
   useDuoMapRealtime(id);
 
@@ -57,7 +58,29 @@ export default function DuoMapScreen() {
   );
 
   function handleRegionChange(region: Region) {
+    regionRef.current = region;
     setLatDelta(region.latitudeDelta);
+  }
+
+  // factor < 1 → zoom in (vùng nhìn nhỏ lại), factor > 1 → zoom out
+  function handleZoom(factor: number) {
+    const region = regionRef.current;
+    const latitudeDelta = Math.min(
+      Math.max(region.latitudeDelta * factor, 0.002),
+      120
+    );
+    const longitudeDelta = Math.min(
+      Math.max(region.longitudeDelta * factor, 0.002),
+      120
+    );
+    const next = {
+      latitude: region.latitude,
+      longitude: region.longitude,
+      latitudeDelta,
+      longitudeDelta,
+    };
+    regionRef.current = next;
+    mapRef.current?.animateToRegion(next, 250);
   }
 
   function handleClusterPress(lats: number[], lngs: number[]) {
@@ -110,6 +133,7 @@ export default function DuoMapScreen() {
                 <Marker
                   key={cluster.id}
                   coordinate={{ latitude: cluster.latitude, longitude: cluster.longitude }}
+                  anchor={{ x: 0.5, y: 1 }}
                   tracksViewChanges={false}
                   onPress={() =>
                     handleClusterPress(
@@ -131,6 +155,7 @@ export default function DuoMapScreen() {
               <Marker
                 key={cluster.id}
                 coordinate={{ latitude: cluster.latitude, longitude: cluster.longitude }}
+                anchor={{ x: 0.5, y: 1 }}
                 tracksViewChanges={false}
                 onPress={() => router.push(`/(app)/memory/${memory.id}`)}
               >
@@ -187,6 +212,23 @@ export default function DuoMapScreen() {
             </TouchableOpacity>
           </View>
         </SafeAreaView>
+
+        {/* Zoom controls — bấm để phóng to/thu nhỏ (cho laptop không pinch được) */}
+        <View style={styles.zoomGroup}>
+          <TouchableOpacity
+            style={[styles.iconBtn, styles.zoomTop, { backgroundColor: t.surface }]}
+            onPress={() => handleZoom(0.5)}
+          >
+            <Ionicons name="add" size={22} color={t.primary} />
+          </TouchableOpacity>
+          <View style={[styles.zoomDivider, { backgroundColor: t.border }]} />
+          <TouchableOpacity
+            style={[styles.iconBtn, styles.zoomBottom, { backgroundColor: t.surface }]}
+            onPress={() => handleZoom(2)}
+          >
+            <Ionicons name="remove" size={22} color={t.primary} />
+          </TouchableOpacity>
+        </View>
 
         {/* Partner status badge */}
         <View
@@ -280,6 +322,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 6,
     elevation: 4,
+  },
+  zoomGroup: {
+    position: "absolute",
+    top: 116,
+    right: 12,
+    borderRadius: 22,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  zoomTop: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  zoomBottom: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  zoomDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 8,
   },
   partnerBadge: {
     position: "absolute",

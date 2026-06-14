@@ -3,10 +3,16 @@ import { Tabs, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "@/store/auth";
 import { useTheme } from "@/hooks/useTheme";
+import { usePushToken } from "@/hooks/usePushToken";
+import { useLocationTrigger } from "@/hooks/useLocationTrigger";
 
 export default function AppLayout() {
   const { session } = useAuthStore();
   const t = useTheme();
+
+  // Phase 5D — push token registration + nhắc khi gần memory cũ.
+  usePushToken();
+  useLocationTrigger();
 
   useEffect(() => {
     if (!session) {
